@@ -2,10 +2,10 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "sds.h"
 #include "broker.h"
 #include "util.h"
 #include "cJSON.h"
-#include "buffer.h"
 #include "config.h"
 #include "constant.h"
 
@@ -21,13 +21,13 @@ int srv_load_cfg(char *cfg_path)
     }
 
     char buf[SIZE1024];
-    mpsBuffer *config = mps_buffer_empty();
+    sds config_sds = sdsempty();
     while (fgets(buf, SIZE1024, fp) != NULL) {
-        mps_buffer_append(config, buf, strlen(buf));
+        config_sds = sdscat(config_sds, buf);
     }
 
-    cJSON *config_json = cJSON_Parse(config->buf);
-    mps_buffer_release(config);
+    cJSON *config_json = cJSON_Parse(config_sds);
+    sdsfree(config_sds);
     if (!config_json) {
         srv_log(LOG_ERROR, "error while parsing config file: %s",
                 cJSON_GetErrorPtr());

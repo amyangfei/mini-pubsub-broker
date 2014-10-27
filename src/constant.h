@@ -10,6 +10,9 @@
 #define PUB_PORT_DLFT       5561
 #define SUB_PORT_DLFT       5562
 
+#define TCP_PUB_BACKLOG     511
+#define TCP_SUB_BACKLOG     511
+
 #define SIZE1024    1024
 
 #endif

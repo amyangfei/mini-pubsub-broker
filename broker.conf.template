@@ -1,0 +1,8 @@
+{
+    "pub_ip" : "0.0.0.0",
+    "sub_ip" : "0.0.0.0",
+    "pub_port" : 5561,
+    "sub_port" : 5562,
+    "log_file" : "./broker.log",
+    "pid_file" : "./broker.pid"
+}

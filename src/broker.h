@@ -1,7 +1,9 @@
 #ifndef __BROKER_H
 #define __BROKER_H
 
-#include <event.h>
+#include <event2/event.h>
+
+#include "net.h"
 
 typedef struct broker {
     char *cfg_path;
@@ -15,7 +17,13 @@ typedef struct broker {
     int sub_port;
     int pub_srv_fd;
     int sub_srv_fd;
-    struct event_base *eventloop;
+    struct event_base *evloop;
+    struct event *pub_ev;
+    struct event *sub_ev;
+
+    int pub_backlog;
+    int sub_backlog;
+    char neterr[NET_ERR_LEN];  /* Error buffer for net.c */
 } broker;
 
 extern broker server;
