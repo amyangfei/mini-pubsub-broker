@@ -1,9 +1,28 @@
+#include <stdio.h>
+#include <stdlib.h>
 #include <unistd.h>
+#include <errno.h>
+#include <string.h>
+#include <fcntl.h>
 
 #include "net.h"
 #include "event.h"
 #include "util.h"
 #include "broker.h"
+#include "pubcli.h"
+#include "subcli.h"
+#include "constant.h"
+
+static void msg_redirect(char *buf, int len);
+static int accept_tcp_handler(evutil_socket_t fd, short event, void *args);
+static void pub_ev_handler(evutil_socket_t fd, short event, void *args);
+static void sub_ev_handler(evutil_socket_t fd, short event, void *args);
+
+static void msg_redirect(char *buf, int len)
+{
+    write(STDIN_FILENO, buf, len);
+    write(STDERR_FILENO, buf, len);
+}
 
 static int accept_tcp_handler(evutil_socket_t fd, short event, void *args)
 {
@@ -21,9 +40,59 @@ static int accept_tcp_handler(evutil_socket_t fd, short event, void *args)
     return cfd;
 }
 
-static void pub_read_handler(evutil_socket_t fd, short event, void *args)
+static void pub_ev_handler(evutil_socket_t fd, short event, void *args)
 {
+    if (!(event & EV_READ)) {
+        srv_log(LOG_WARN, "publisher [fd %d] invalid event: %d", event);
+        return;
+    }
 
+    pub_client *c = (pub_client *) args;
+
+    char chunk[PUB_READ_BUF_LEN+1];
+    int n = read(fd, chunk, PUB_READ_BUF_LEN);
+    if (n == -1) {
+        if (errno == EAGAIN || errno == EINTR) {
+            /* temporary unavailable */
+        } else {
+            srv_log(LOG_ERROR, "[fd %d] failed to read from publisher: %s",
+                    fd, strerror(errno));
+            pub_cli_release(c);
+        }
+    } else if (n == 0) {
+        srv_log(LOG_INFO, "[fd %d] publisher detached", fd);
+        pub_cli_release(c);
+    } else {
+        chunk[n] = '\0';
+        srv_log(LOG_INFO, "[fd %d] publisher send: %s", fd, chunk);
+        write(fd, "hello", 5);
+        msg_redirect(chunk, n);
+        /* data process */
+    }
+}
+
+static void sub_ev_handler(evutil_socket_t fd, short event, void *args)
+{
+    sub_client *c = (sub_client *) args;
+
+    if (event & EV_READ) {
+        char chunk[SUB_READ_BUF_LEN];
+        int n = read(fd, chunk, sizeof(chunk));
+        if (n == -1) {
+            if (errno == EAGAIN || errno == EINTR) {
+                /* temporary unavailable */
+            } else {
+                srv_log(LOG_ERROR, "[fd %d] failed to read from sublisher: %s",
+                        fd, strerror(errno));
+                sub_cli_release(c);
+            }
+        } else if (n == 0) {
+            srv_log(LOG_INFO, "[fd %d] sublisher detached", fd);
+            sub_cli_release(c);
+        } else {
+            /* ignore */
+        }
+    }
 }
 
 void accept_pub_handler(evutil_socket_t fd, short event, void *args)
@@ -32,14 +101,37 @@ void accept_pub_handler(evutil_socket_t fd, short event, void *args)
     if (cfd == -1) {
         return;
     }
+    pub_client *c = pub_cli_create(cfd);
     net_tcp_set_nonblock(NULL, cfd);
     net_enable_tcp_no_delay(NULL, cfd);
-    struct event *pub_ev = event_new(server.evloop, cfd, EV_READ,
-            pub_read_handler, NULL);
+    struct event *pub_ev = event_new(server.evloop, cfd, EV_READ|EV_PERSIST,
+            pub_ev_handler, c);
     if (pub_ev == NULL) {
+        free(c);
         close(cfd);
         return;
     }
     event_add(pub_ev, NULL);
+    c->ev = pub_ev;
+}
+
+void accept_sub_handler(evutil_socket_t fd, short event, void *args)
+{
+    int cfd = accept_tcp_handler(fd, event, args);
+    if (cfd == -1) {
+        return;
+    }
+    sub_client *c = sub_cli_create(cfd);
+    net_tcp_set_nonblock(NULL, cfd);
+    net_enable_tcp_no_delay(NULL, cfd);
+    struct event *sub_ev = event_new(server.evloop, cfd,
+            EV_READ|EV_WRITE|EV_PERSIST, sub_ev_handler, c);
+    if (sub_ev == NULL) {
+        free(c);
+        close(cfd);
+        return;
+    }
+    event_add(sub_ev, NULL);
+    c->ev = sub_ev;
 }
 
