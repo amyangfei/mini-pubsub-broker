@@ -3,7 +3,7 @@ SRC_PATH = ./src
 SRC_EXT = c
 INCLUDES = -I $(SRC_PATH)/
 WARN = -Wall
-CFLAGS = $(STD) $(WARN)
+CFLAGS = $(STD) $(WARN) -D_GNU_SOURCE
 DCOMPILE_FLAGS = -g
 COMPILE_FLAGS = -O3
 release: CFLAGS += $(COMPILE_FLAGS)
@@ -17,7 +17,8 @@ all: dirs $(BUILD_PATH)/broker
 
 $(BUILD_PATH)/broker: $(BUILD_PATH)/broker.o $(BUILD_PATH)/util.o \
 	$(BUILD_PATH)/cJSON.o $(BUILD_PATH)/config.o $(BUILD_PATH)/sds.o \
-	$(BUILD_PATH)/zmalloc.o $(BUILD_PATH)/net.o $(BUILD_PATH)/event.o
+	$(BUILD_PATH)/zmalloc.o $(BUILD_PATH)/net.o $(BUILD_PATH)/event.o \
+	$(BUILD_PATH)/pubcli.o $(BUILD_PATH)/subcli.o
 	$(CC) $(CFLAGS) -o $@ $^ -levent -lm
 
 $(BUILD_PATH)/%.o: $(SRC_PATH)/%.$(SRC_EXT)

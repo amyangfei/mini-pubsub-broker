@@ -6,5 +6,6 @@
 #define IP_STR_LEN INET6_ADDRSTRLEN
 
 void accept_pub_handler(evutil_socket_t fd, short event, void *args);
+void accept_sub_handler(evutil_socket_t fd, short event, void *args);
 
 #endif

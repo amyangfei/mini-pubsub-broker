@@ -13,6 +13,9 @@
 #define TCP_PUB_BACKLOG     511
 #define TCP_SUB_BACKLOG     511
 
+#define PUB_READ_BUF_LEN    (1024*16)
+#define SUB_READ_BUF_LEN    (1024*16)
+
 #define SIZE1024    1024
 
 #endif

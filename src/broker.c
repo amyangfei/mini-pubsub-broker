@@ -62,6 +62,20 @@ void server_init()
     server.pub_ev = event_new(server.evloop, server.pub_srv_fd,
             EV_READ|EV_PERSIST, accept_pub_handler, NULL);
     event_add(server.pub_ev, NULL);
+
+    int sub_fd = net_tcp_server(server.neterr, server.sub_port, server.sub_ip,
+            server.sub_backlog);
+    if (sub_fd == NET_ERR) {
+        srv_log(LOG_ERROR, "opening socket: %s", server.neterr);
+        exit(EXIT_FAILURE);
+    }
+    net_tcp_set_nonblock(NULL, sub_fd);
+    server.sub_srv_fd = sub_fd;
+
+    server.sub_ev = event_new(server.evloop, server.sub_srv_fd,
+            EV_READ|EV_PERSIST, accept_sub_handler, NULL);
+    event_add(server.sub_ev, NULL);
+
 }
 
 static void server_evloop_start()
