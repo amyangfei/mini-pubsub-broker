@@ -1,7 +1,7 @@
-BUILD_PATH = ./build
-SRC_PATH = ./src
+BUILD_PATH = build
+SRC_PATH = src
 SRC_EXT = c
-INCLUDES = -I $(SRC_PATH)/
+INCLUDES = -I $(SRC_PATH)/ -I $(SRC_PATH)/common/ -I $(SRC_PATH)/protocol
 WARN = -Wall
 CFLAGS = $(STD) $(WARN)
 DCOMPILE_FLAGS = -g
@@ -11,14 +11,16 @@ debug: CFLAGS += $(DCOMPILE_FLAGS)
 
 SOURCES = $(shell find $(SRC_PATH)/ -name '*.$(SRC_EXT)')
 OBJECTS = $(SOURCES:$(SRC_PATH)/%.$(SRC_EXT)=$(BUILD_PATH)/%.o)
+DEPS = $(OBJECTS:.o=.d)
 
 all: dirs $(BUILD_PATH)/broker
 .PHONY: all
 
 $(BUILD_PATH)/broker: $(BUILD_PATH)/broker.o $(BUILD_PATH)/util.o \
-	$(BUILD_PATH)/cJSON.o $(BUILD_PATH)/config.o $(BUILD_PATH)/sds.o \
-	$(BUILD_PATH)/zmalloc.o $(BUILD_PATH)/net.o $(BUILD_PATH)/event.o \
-	$(BUILD_PATH)/pubcli.o $(BUILD_PATH)/subcli.o
+	$(BUILD_PATH)/common/cJSON.o $(BUILD_PATH)/common/zmalloc.o \
+	$(BUILD_PATH)/common/sds.o \
+	$(BUILD_PATH)/config.o $(BUILD_PATH)/net.o $(BUILD_PATH)/event.o \
+	$(BUILD_PATH)/protocol/pubcli.o $(BUILD_PATH)/protocol/subcli.o
 	$(CC) $(CFLAGS) -o $@ $^ -levent -lm
 
 $(BUILD_PATH)/%.o: $(SRC_PATH)/%.$(SRC_EXT)
@@ -53,7 +55,7 @@ debug: dirs $(OBJECTS)
 .PHONY: dirs
 dirs:
 	@echo "Creating directories"
-	@mkdir -p $(BUILD_PATH)
+	@mkdir -p $(dir $(OBJECTS))
 
 clean:
 	rm -rf build
