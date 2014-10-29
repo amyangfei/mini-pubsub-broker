@@ -17,4 +17,7 @@ void log_set_fp(FILE *fp);
 void log_set_level(char* level);
 void srv_log(int level, const char *fmt, ...);
 
+char *create_string_obj(char *ptr, size_t len);
+int string2ll(const char *s, size_t slen, long long *value);
+
 #endif

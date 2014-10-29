@@ -70,28 +70,33 @@ static void pub_ev_handler(evutil_socket_t fd, short event, void *args)
         /* data process */
     }
 }
-
 static void sub_ev_handler(evutil_socket_t fd, short event, void *args)
 {
     sub_client *c = (sub_client *) args;
 
     if (event & EV_READ) {
-        char chunk[SUB_READ_BUF_LEN];
-        int n = read(fd, chunk, sizeof(chunk));
+        c->read_buf = sdsMakeRoomFor(c->read_buf, SUB_READ_BUF_LEN);
+        size_t cur_len = sdslen(c->read_buf);
+        int n = read(fd, c->read_buf + cur_len, SUB_READ_BUF_LEN);
         if (n == -1) {
             if (errno == EAGAIN || errno == EINTR) {
                 /* temporary unavailable */
+                return;
             } else {
                 srv_log(LOG_ERROR, "[fd %d] failed to read from sublisher: %s",
                         fd, strerror(errno));
                 sub_cli_release(c);
+                return;
             }
         } else if (n == 0) {
             srv_log(LOG_INFO, "[fd %d] sublisher detached", fd);
             sub_cli_release(c);
+            return;
         } else {
-            /* ignore */
+            sdsIncrLen(c->read_buf, n);
+            /*printf("%s\n", c->read_buf);*/
         }
+        process_sub_read_buf(c);
     }
 }
 
