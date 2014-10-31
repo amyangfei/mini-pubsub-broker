@@ -1,7 +1,9 @@
 #include <string.h>
+#include <strings.h>
 #include <stdarg.h>
 #include <time.h>
 #include <limits.h>
+#include <unistd.h>
 #include <sys/time.h>
 
 #include "util.h"
@@ -148,3 +150,39 @@ int string2ll(const char *s, size_t slen, long long *value) {
     return 1;
 }
 
+/* Get current Unix timestamp in milliseconds */
+void get_time_millisec(INT64 *assigned_timestamp)
+{
+    struct timeval tv;
+
+    gettimeofday(&tv, NULL);
+    *assigned_timestamp = tv.tv_sec * 1000 + tv.tv_usec / 1000;
+}
+
+/* Get current Unix timestamp in seconds */
+void get_time_sec(int *assigned_timestamp)
+{
+    struct timeval tv;
+
+    gettimeofday(&tv, NULL);
+    *assigned_timestamp = tv.tv_sec % INT32_MAX;
+}
+
+/* Make sure oid has alloced 24 sizeof char at least */
+void create_objectid(char *oid, int seq)
+{
+    int cur_ts, pid;
+
+    get_time_sec(&cur_ts);
+    sprintf(oid, "%.8x", cur_ts);
+
+    sprintf(oid+8, "%.6x", 0xffffff);
+
+    pid = getpid() % INT16_MAX;
+    sprintf(oid+14, "%.4x", pid);
+
+    if (seq < 0 || seq >= 1 << 24) {
+        seq = 0;
+    }
+    sprintf(oid+18, "%.6x", seq);
+}

@@ -3,6 +3,8 @@
 
 #include <stdio.h>
 
+#include "constant.h"
+
 #define LOG_DEBUG 0
 #define LOG_INFO 1
 #define LOG_WARN 2
@@ -19,5 +21,7 @@ void srv_log(int level, const char *fmt, ...);
 
 char *create_string_obj(char *ptr, size_t len);
 int string2ll(const char *s, size_t slen, long long *value);
+void get_time_millisec(INT64 *assigned_timestamp);
+void get_time_sec(int *assigned_timestamp);
 
 #endif
