@@ -5,6 +5,7 @@
 #include <errno.h>
 #include <unistd.h>
 #include <signal.h>
+#include <time.h>
 #include <event2/event.h>
 
 #include "config.h"
@@ -14,10 +15,22 @@
 #include "util.h"
 #include "event.h"
 
+sharedStruct shared;
+
 broker server;
+
+void create_shared_struct()
+{
+    shared.crlf = sdsnew("\r\n");
+    shared.ok = sdsnew("+OK\r\n");
+    shared.err = sdsnew("-ERR\r\n");
+    shared.pong = sdsnew("+PONG\r\n");
+}
 
 void server_config_init()
 {
+    srand(time(NULL));
+
     server.cfg_path = strdup(CONFIG_FILE_PATH);
     server.pid_file = strdup(PID_FILE_PATH);
     server.log_level = strdup(LOG_DEBUG_STR);
@@ -36,6 +49,8 @@ void server_config_init()
 
     server.pub_backlog = TCP_PUB_BACKLOG;
     server.sub_backlog = TCP_SUB_BACKLOG;
+
+    server.sub_inc_counter = rand_int64(1 << 24);
 }
 
 void server_init()
@@ -43,6 +58,8 @@ void server_init()
     if (signal(SIGPIPE, SIG_IGN) == SIG_ERR) {
         return;
     }
+
+    create_shared_struct();
 
     server.evloop = event_base_new();
     if (!server.evloop) {

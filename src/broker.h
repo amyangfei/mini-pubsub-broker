@@ -6,6 +6,7 @@
 #include "net.h"
 #include "list.h"
 #include "ght_hash_table.h"
+#include "subcli.h"
 
 typedef struct broker {
     char *cfg_path;
@@ -29,8 +30,25 @@ typedef struct broker {
     int pub_backlog;
     int sub_backlog;
     char neterr[NET_ERR_LEN];  /* Error buffer for net.c */
+
+    int sub_inc_counter;    /* auto increasing counter for sub clients */
 } broker;
 
+typedef void subCommandProc(sub_client *c);
+
+typedef struct subCommand {
+    char *name;
+    subCommandProc *proc;
+} subCommand;
+
+typedef struct sharedStruct {
+    sds crlf;
+    sds ok;
+    sds err;
+    sds pong;
+} sharedStruct;
+
+extern sharedStruct shared;
 extern broker server;
 
 #endif

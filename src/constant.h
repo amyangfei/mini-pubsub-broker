@@ -17,8 +17,11 @@
 
 #define PUB_READ_BUF_LEN    (1024*16)
 #define SUB_READ_BUF_LEN    (1024*16)
+#define SUB_WRITE_BUF_LEN   (1024*16)
 #define MAX_INLINE_READ     (1024*16)
 #define MAX_BULK_LEN        (1024*16)
+
+#define CLIENT_ID_LEN       24
 
 #define SIZE1024            1024
 

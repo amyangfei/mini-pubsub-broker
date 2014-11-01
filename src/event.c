@@ -16,7 +16,6 @@
 static void msg_redirect(char *buf, int len);
 static int accept_tcp_handler(evutil_socket_t fd, short event, void *args);
 static void pub_ev_handler(evutil_socket_t fd, short event, void *args);
-static void sub_ev_handler(evutil_socket_t fd, short event, void *args);
 
 static void msg_redirect(char *buf, int len)
 {
@@ -70,7 +69,7 @@ static void pub_ev_handler(evutil_socket_t fd, short event, void *args)
         /* data process */
     }
 }
-static void sub_ev_handler(evutil_socket_t fd, short event, void *args)
+void sub_ev_handler(evutil_socket_t fd, short event, void *args)
 {
     sub_client *c = (sub_client *) args;
 
@@ -94,9 +93,10 @@ static void sub_ev_handler(evutil_socket_t fd, short event, void *args)
             return;
         } else {
             sdsIncrLen(c->read_buf, n);
-            /*printf("%s\n", c->read_buf);*/
         }
         process_sub_read_buf(c);
+    } else if (event & EV_WRITE) {
+        send_reply_to_subcli(c);
     }
 }
 
@@ -126,11 +126,12 @@ void accept_sub_handler(evutil_socket_t fd, short event, void *args)
     if (cfd == -1) {
         return;
     }
-    sub_client *c = sub_cli_create(cfd);
+    sub_client *c = sub_cli_create(cfd, ++server.sub_inc_counter);
     net_tcp_set_nonblock(NULL, cfd);
     net_enable_tcp_no_delay(NULL, cfd);
     struct event *sub_ev = event_new(server.evloop, cfd,
-            EV_READ|EV_WRITE|EV_PERSIST, sub_ev_handler, c);
+            EV_READ|EV_PERSIST, sub_ev_handler, c);
+            /*EV_READ|EV_WRITE|EV_PERSIST, sub_ev_handler, c);*/
     if (sub_ev == NULL) {
         free(c);
         close(cfd);

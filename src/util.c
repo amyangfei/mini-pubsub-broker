@@ -10,6 +10,8 @@
 #include "constant.h"
 #include "broker.h"
 
+#define MIN_PROB (1.0 / ((INT64)RAND_MAX + 1))
+
 static int srv_log_level = LOG_DEBUG;
 static FILE *srv_log_fp  = NULL;
 
@@ -185,4 +187,39 @@ void create_objectid(char *oid, int seq)
         seq = 0;
     }
     sprintf(oid+18, "%.6x", seq);
+}
+
+static int happened(double probability) //probability 0~1
+{
+    long rmax = (long) RAND_MAX;
+    if(probability <= 0)
+        return 0;
+    if(probability < MIN_PROB)
+        return rand() == 0 && happened(probability*(rmax+1));
+    if(rand() <= probability * (rmax+1))
+        return 1;
+    return 0;
+}
+
+/* generate a random number between 0 and n-1, including n-1 */
+INT64 rand_int64(INT64 n)
+{
+    INT64 r, t;
+    INT64 rmax = (INT64) RAND_MAX;
+    if(n <= rmax)
+    {
+        r = rmax - (rmax+1)%n; // tail
+        t = rand();
+        while(t > r)
+            t = rand();
+        return t % n;
+    }
+    else
+    {
+        r = n % (rmax+1);   // reminder
+        if(happened((double)r/n))   // probability of get the reminder
+            return n-r+rand_int64(r);
+        else
+            return rand()+rand_int64(n/(rmax+1)) * (rmax+1);
+    }
 }
