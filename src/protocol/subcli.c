@@ -16,10 +16,28 @@ static int process_inline_buffer(sub_client *c);
 static int process_command(sub_client *c);
 
 static void ping_command(sub_client *c);
+static void subscribe_command(sub_client *c);
+static void unsubscribe_command(sub_client *c);
 
+static int prepare_to_write(sub_client *c);
 static void add_reply_bulklen(sub_client *c, sds cnt);
 static void add_reply_bulk(sub_client *c, sds cnt);
 static void add_reply(sub_client *c, sds cnt);
+static void add_reply_error_fmt(sub_client *c, const char *fmt, ...);
+static void add_reply_error_length(sub_client *c, char *s, size_t len);
+static void add_reply_string(sub_client *c, char *s, size_t len);
+
+/* Subscribe client command table
+ *
+ * name: a string representing the command name.
+ * proc: pointer to the C function implementing the command.
+ * arity: number of arguments, it is possible to use -N to say >= N
+ * */
+struct sub_command sub_command_table[] = {
+    {"ping", ping_command, 1},
+    {"subscribe", subscribe_command, -2},
+    {"unsubscribe", unsubscribe_command, -1},
+};
 
 sub_client *sub_cli_create(int fd, int inc_counter)
 {
@@ -37,6 +55,21 @@ sub_client *sub_cli_create(int fd, int inc_counter)
     c->multi_bulk_len = 0;
     c->bulk_len = -1;
     return c;
+}
+
+hashtable *sub_commands_init()
+{
+    hashtable *commands;
+
+    int num_cmds = sizeof(sub_command_table) / sizeof(sub_command);
+    commands = ght_create(3 * num_cmds);
+    int i;
+    for (i = 0; i < num_cmds; i++) {
+        sub_command *cmd = sub_command_table + i;
+        ght_insert(commands, cmd, strlen(cmd->name), cmd->name);
+    }
+
+    return commands;
 }
 
 static void free_client_argv(sub_client *c)
@@ -90,25 +123,25 @@ static int process_multibulk_buffer(sub_client *c)
                 srv_log(LOG_ERROR, "protocol error: too big mbulk string");
                 set_protocol_err(c, 0);
             }
-            return BROKER_ERR;
+            return SUBCLI_ERR;
         }
 
         /* Buffer should also contain \n */
         if (newline-(c->read_buf) > ((signed)sdslen(c->read_buf)-2)) {
-            return BROKER_ERR;
+            return SUBCLI_ERR;
         }
 
         ok = string2ll(c->read_buf+1, newline-(c->read_buf+1), &ll);
         if (!ok || ll > SUB_READ_BUF_LEN) {
             srv_log(LOG_ERROR, "protocol error: invalid multibulk length");
             set_protocol_err(c, pos);
-            return BROKER_ERR;
+            return SUBCLI_ERR;
         }
 
         pos = (newline - c->read_buf) + 2;
         if (ll <= 0) {
             sdsrange(c->read_buf, pos, -1);
-            return BROKER_OK;
+            return SUBCLI_OK;
         }
 
         c->multi_bulk_len = ll;
@@ -123,7 +156,7 @@ static int process_multibulk_buffer(sub_client *c)
                 if (sdslen(c->read_buf) > MAX_INLINE_READ) {
                     srv_log(LOG_ERROR, "protocol error: too big bulk count string");
                     set_protocol_err(c, 0);
-                    return BROKER_ERR;
+                    return SUBCLI_ERR;
                 }
                 break;
             }
@@ -137,14 +170,14 @@ static int process_multibulk_buffer(sub_client *c)
                 srv_log(LOG_ERROR, "Protocol error: expected '$', got '%c'",
                         c->read_buf[pos]);
                 set_protocol_err(c, pos);
-                return BROKER_ERR;
+                return SUBCLI_ERR;
             }
 
             ok = string2ll(c->read_buf+pos+1, newline-(c->read_buf+pos+1), &ll);
             if (!ok || ll < 0 || ll > MAX_BULK_LEN) {
                 srv_log(LOG_ERROR, "Protocol error: invalid bulk length");
                 set_protocol_err(c, pos);
-                return BROKER_ERR;
+                return SUBCLI_ERR;
             }
 
             pos += newline - (c->read_buf + pos) + 2;
@@ -167,10 +200,10 @@ static int process_multibulk_buffer(sub_client *c)
     if (pos) sdsrange(c->read_buf, pos, -1);
 
     /* We're done when c->multibulk == 0 */
-    if (c->multi_bulk_len == 0) return BROKER_OK;
+    if (c->multi_bulk_len == 0) return SUBCLI_OK;
 
     /* Still not read to process the command */
-    return BROKER_ERR;
+    return SUBCLI_ERR;
 }
 
 static int process_inline_buffer(sub_client *c)
@@ -187,7 +220,7 @@ static int process_inline_buffer(sub_client *c)
             srv_log(LOG_ERROR, "Protocol error: too big inline request");
             set_protocol_err(c, 0);
         }
-        return BROKER_ERR;
+        return SUBCLI_ERR;
     }
 
     if (newline && newline != c->read_buf && *(newline-1) == '\r') {
@@ -200,7 +233,7 @@ static int process_inline_buffer(sub_client *c)
     sdsfree(aux);
     if (argv == NULL) {
         set_protocol_err(c, 0);
-        return BROKER_ERR;
+        return SUBCLI_ERR;
     }
 
     sdsrange(c->read_buf, querylen+2, -1);
@@ -215,14 +248,30 @@ static int process_inline_buffer(sub_client *c)
         }
     }
     zfree(argv);
-    return BROKER_OK;
+    return SUBCLI_OK;
 }
 
 static int process_command(sub_client *c)
 {
-    ping_command(c);
+    srv_log(LOG_DEBUG, "c->argv[0]: %s", c->argv[0]);
+    sds name = sdsnew(c->argv[0]);
+    sdstolower(name);
 
-    return BROKER_OK;
+    sub_command *cmd = ght_get(server.sub_commands, sdslen(name), name);
+    if (!cmd) {
+        add_reply_error_fmt(c, "unknown command '%s'", name);
+    } else if ((cmd->arity > 0 && cmd->arity != c->argc) ||
+               (c->argc < -cmd->arity)) {
+        add_reply_error_fmt(c, "wrong number of arguments for '%s' command",
+                name);
+    } else {
+        srv_log(LOG_DEBUG, "cmd name: %s arity: %d", cmd->name, cmd->arity);
+        cmd->proc(c);
+    }
+
+    sdsfree(name);
+
+    return SUBCLI_OK;
 }
 
 void process_sub_read_buf(sub_client *c)
@@ -235,9 +284,9 @@ void process_sub_read_buf(sub_client *c)
         }
 
         if (c->req_type == REQ_INLINE) {
-            if (process_inline_buffer(c) != BROKER_OK) break;
+            if (process_inline_buffer(c) != SUBCLI_OK) break;
         } else if (c->req_type == REQ_MULTIBULK) {
-            if (process_multibulk_buffer(c) != BROKER_OK) break;
+            if (process_multibulk_buffer(c) != SUBCLI_OK) break;
         } else {
             srv_log(LOG_ERROR, "error req_type %d", c->req_type);
             exit(EXIT_FAILURE);
@@ -247,12 +296,10 @@ void process_sub_read_buf(sub_client *c)
     if (c->argc == 0) {
         free_client_argv(c);
     } else {
-        if (process_command(c) == BROKER_OK) {
+        if (process_command(c) == SUBCLI_OK) {
             reset_client(c);
         }
     }
-    /*subcli_event_update(c, event_get_events(c->ev) | EV_WRITE);*/
-    /*write(c->fd, "ok", 2);*/
 }
 
 static void ping_command(sub_client *c)
@@ -260,7 +307,19 @@ static void ping_command(sub_client *c)
     add_reply(c, shared.pong);
 }
 
-void subcli_event_update(sub_client *c, short event)
+static void subscribe_command(sub_client *c)
+{
+    add_reply_string(c, "+subscribe", 10);
+    add_reply_string(c, "\r\n", 2);
+}
+
+static void unsubscribe_command(sub_client *c)
+{
+    add_reply_string(c, "+unsubscribe", 12);
+    add_reply_string(c, "\r\n", 2);
+}
+
+int subcli_event_update(sub_client *c, short event)
 {
     event_del(c->ev);
 
@@ -270,10 +329,14 @@ void subcli_event_update(sub_client *c, short event)
         free(c);
         close(c->fd);
         srv_log(LOG_ERROR, "update sub client failed");
-        return;
+        return SUBCLI_ERR;
     }
-    event_add(sub_ev_new, NULL);
+    if (event_add(sub_ev_new, NULL) == -1) {
+        event_del(sub_ev_new);
+        return SUBCLI_ERR;
+    }
     c->ev = sub_ev_new;
+    return SUBCLI_OK;
 }
 
 void send_reply_to_subcli(sub_client *c)
@@ -303,6 +366,15 @@ void send_reply_to_subcli(sub_client *c)
     subcli_event_update(c, event_get_events(c->ev) & ~EV_WRITE);
 }
 
+static int prepare_to_write(sub_client *c)
+{
+    short event = event_get_events(c->ev);
+    if (!(event & EV_WRITE)) {
+        return subcli_event_update(c, event | EV_WRITE);
+    }
+    return SUBCLI_OK;
+}
+
 static void add_reply_bulk(sub_client *c, sds cnt)
 {
     add_reply_bulklen(c, cnt);
@@ -321,22 +393,57 @@ static int add_reply_to_buf(sub_client *c, char *s, size_t len)
 {
     size_t available = sizeof(c->wbuf) - c->wbufpos;
     if (len > available) {
-        return BROKER_ERR;
+        return SUBCLI_ERR;
     }
 
     memcpy(c->wbuf + c->wbufpos, s, len);
     c->wbufpos += len;
-    return BROKER_OK;
+    return SUBCLI_OK;
 }
 
 static void add_reply(sub_client *c, sds cnt)
 {
-    short event = event_get_events(c->ev);
-    if (!(event & EV_WRITE)) {
-        subcli_event_update(c, event | EV_WRITE);
+    if (prepare_to_write(c) == SUBCLI_ERR) {
+        return;
     }
 
-    if (add_reply_to_buf(c, cnt, sdslen(cnt)) != BROKER_OK) {
+    if (add_reply_to_buf(c, cnt, sdslen(cnt)) != SUBCLI_OK) {
         srv_log(LOG_ERROR, "failed to add reply [%s] to sub client", cnt);
     }
 }
+
+static void add_reply_error_fmt(sub_client *c, const char *fmt, ...)
+{
+    size_t l, i;
+    va_list ap;
+    va_start(ap, fmt);
+    sds s = sdscatvprintf(sdsempty(), fmt, ap);
+    va_end(ap);
+
+    /* Make sure there are no newlines in the string, otherwise invalid protocol
+     * is emitted. */
+    l = sdslen(s);
+    for (i = 0; i < l; i++) {
+        if (s[i] == '\r' || s[i] == '\n') {
+            s[i] = ' ';
+        }
+    }
+    add_reply_error_length(c, s, sdslen(s));
+    sdsfree(s);
+}
+
+static void add_reply_error_length(sub_client *c, char *s, size_t len)
+{
+    add_reply_string(c, "-ERR ", 5);
+    add_reply_string(c, s, len);
+    add_reply_string(c, "\r\n", 2);
+}
+
+static void add_reply_string(sub_client *c, char *s, size_t len)
+{
+    if (prepare_to_write(c) == SUBCLI_ERR) {
+        return;
+    }
+    add_reply_to_buf(c, s, len);
+}
+

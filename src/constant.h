@@ -23,10 +23,14 @@
 
 #define CLIENT_ID_LEN       24
 
+#define SIZE512             512
 #define SIZE1024            1024
 
 #define BROKER_OK           0
 #define BROKER_ERR          -1
+
+#define SUBCLI_OK           0
+#define SUBCLI_ERR          -1
 
 #define INT64       int64_t
 

@@ -14,12 +14,13 @@
 #include "net.h"
 #include "util.h"
 #include "event.h"
+#include "subcli.h"
 
 sharedStruct shared;
 
 broker server;
 
-void create_shared_struct()
+static void create_shared_struct()
 {
     shared.crlf = sdsnew("\r\n");
     shared.ok = sdsnew("+OK\r\n");
@@ -47,6 +48,10 @@ void server_config_init()
     server.pub_ev = NULL;
     server.sub_ev = NULL;
 
+    server.subcli_table = NULL;
+    server.subscibe_table = NULL;
+    server.sub_commands = NULL;
+
     server.pub_backlog = TCP_PUB_BACKLOG;
     server.sub_backlog = TCP_SUB_BACKLOG;
 
@@ -60,6 +65,8 @@ void server_init()
     }
 
     create_shared_struct();
+    server.subcli_table = ght_create(SIZE512);
+    server.sub_commands = sub_commands_init();
 
     server.evloop = event_base_new();
     if (!server.evloop) {

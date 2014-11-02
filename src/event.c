@@ -131,7 +131,6 @@ void accept_sub_handler(evutil_socket_t fd, short event, void *args)
     net_enable_tcp_no_delay(NULL, cfd);
     struct event *sub_ev = event_new(server.evloop, cfd,
             EV_READ|EV_PERSIST, sub_ev_handler, c);
-            /*EV_READ|EV_WRITE|EV_PERSIST, sub_ev_handler, c);*/
     if (sub_ev == NULL) {
         free(c);
         close(cfd);
@@ -139,5 +138,6 @@ void accept_sub_handler(evutil_socket_t fd, short event, void *args)
     }
     event_add(sub_ev, NULL);
     c->ev = sub_ev;
+    ght_insert(server.subcli_table, c, CLIENT_ID_LEN, c->id);
 }
 

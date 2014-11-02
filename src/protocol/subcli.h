@@ -4,6 +4,7 @@
 #include <event2/event_struct.h>
 
 #include "sds.h"
+#include "ght_hash_table.h"
 #include "constant.h"
 
 #define REQ_INLINE      1
@@ -34,11 +35,20 @@ typedef struct sub_client {
     char **argv;
 } sub_client;
 
+typedef void sub_command_proc(sub_client *c);
+
+typedef struct sub_command {
+    char *name;
+    sub_command_proc *proc;
+    int arity;
+} sub_command;
+
 sub_client *sub_cli_create(int fd, int inc_counter);
+hashtable *sub_commands_init();
 void reset_client(sub_client *c);
 void sub_cli_release(sub_client *c);
 void process_sub_read_buf(sub_client *c);
-void subcli_event_update(sub_client *c, short event);
+int subcli_event_update(sub_client *c, short event);
 void send_reply_to_subcli(sub_client *c);
 
 #endif

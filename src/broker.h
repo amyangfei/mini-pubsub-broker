@@ -24,14 +24,22 @@ typedef struct broker {
     struct event *pub_ev;
     struct event *sub_ev;
 
-    lkdList *sub_list;
-    ght_hash_table_t *sub_table;  /* mapping subscibe key to client list */
+    /* mapping from subscibe-client id to the subscribe-client */
+    hashtable *subcli_table;
+    /* mapping from subscibe key to a list of clients who subscribed this key */
+    hashtable *subscibe_table;
+    /* mapping from command name key to sub_command struct */
+    hashtable *sub_commands;
 
     int pub_backlog;
     int sub_backlog;
-    char neterr[NET_ERR_LEN];  /* Error buffer for net.c */
 
-    int sub_inc_counter;    /* auto increasing counter for sub clients */
+    /* Error buffer for net.c */
+    char neterr[NET_ERR_LEN];
+
+    /* auto increasing counter for sub clients */
+    int sub_inc_counter;
+
 } broker;
 
 typedef void subCommandProc(sub_client *c);
