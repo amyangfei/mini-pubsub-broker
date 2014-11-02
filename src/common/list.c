@@ -255,13 +255,6 @@ lkdList *lkd_list_dup (lkdList *self)
     return copy;
 }
 
-/* Only used in test function */
-static void _lkd_list_free (void *data)
-{
-    lkdList *self = (lkdList *) data;
-    lkd_list_release(&self);
-}
-
 size_t lkd_list_size(lkdList *self)
 {
     return self->size;
@@ -276,7 +269,15 @@ void lkd_list_autofree(lkdList *self)
 }
 
 #ifdef LIST_TEST_MAIN
-int main(int argc, int *argv[])
+
+/* Only used in test function */
+static void _lkd_list_free (void *data)
+{
+    lkdList *self = (lkdList *) data;
+    lkd_list_release(&self);
+}
+
+int main(int argc, char *argv[])
 {
     (void) argc;
     (void) argv;

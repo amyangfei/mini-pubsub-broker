@@ -187,6 +187,8 @@ typedef struct
   ght_hash_entry_t *p_newest;        /* The entry inserted the latest. */
 } ght_hash_table_t;
 
+typedef ght_hash_table_t hashtable;
+
 /**
  * Create a new hash table. The number of buckets should be about as
  * big as the number of elements you wish to store in the table for
