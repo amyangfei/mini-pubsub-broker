@@ -32,9 +32,14 @@ int hset_size(hset *p_hset)
     return ght_size(p_hset->table);
 }
 
-int hset_insert(hset *p_hset, unsigned int key_size, const void *key_data)
+int hset_insert(hset *p_hset, unsigned int key_size, const void *key_data,
+        void *val_data)
 {
-    return ght_insert(p_hset->table, p_hset->fake_val, key_size, key_data);
+    if (val_data == NULL) {
+        return ght_insert(p_hset->table, p_hset->fake_val, key_size, key_data);
+    } else {
+        return ght_insert(p_hset->table, val_data, key_size, key_data);
+    }
 }
 
 void *hset_remove(hset *p_hset, unsigned int key_size, const void *key_data)
@@ -88,7 +93,7 @@ int main(int argc, char *argv[])
     hset *hs = hset_create(64);
 
     for (i = 0; i < keys_len; i++) {
-        hset_insert(hs, strlen(keys[i].key), keys[i].key);
+        hset_insert(hs, strlen(keys[i].key), keys[i].key, NULL);
     }
     assert(hset_size(hs) == keys_len);
 

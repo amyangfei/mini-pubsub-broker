@@ -12,5 +12,6 @@ typedef struct pub_client {
 
 pub_client *pub_cli_create(int fd);
 void pub_cli_release(pub_client *c);
+void process_pub_read_buf(pub_client *c);
 
 #endif

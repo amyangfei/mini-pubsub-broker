@@ -3,12 +3,15 @@
 #include <unistd.h>
 #include <errno.h>
 #include <event2/event.h>
+#include <datrie/trie.h>
 
 #include "util.h"
 #include "subcli.h"
 #include "zmalloc.h"
 #include "broker.h"
 #include "event.h"
+#include "trie_util.h"
+#include "hset.h"
 
 static void set_protocol_err(sub_client *c, int pos);
 static int process_multibulk_buffer(sub_client *c);
@@ -21,7 +24,6 @@ static void unsubscribe_command(sub_client *c);
 
 static int prepare_to_write(sub_client *c);
 static void add_reply_bulklen(sub_client *c, sds cnt);
-static void add_reply_bulk(sub_client *c, sds cnt);
 static void add_reply(sub_client *c, sds cnt);
 static void add_reply_error_fmt(sub_client *c, const char *fmt, ...);
 static void add_reply_error_length(sub_client *c, char *s, size_t len);
@@ -77,7 +79,8 @@ static void free_client_argv(sub_client *c)
     int i;
     for (i = 0; i < c->argc; i++) {
         srv_log(LOG_DEBUG, "freeing client argv: %s", c->argv[i]);
-        free(c->argv[i]);
+        /*free(c->argv[i]);*/
+        sdsfree(c->argv[i]);
     }
     if (c->argc > 0) {
         free(c->argv);
@@ -145,7 +148,7 @@ static int process_multibulk_buffer(sub_client *c)
         }
 
         c->multi_bulk_len = ll;
-        c->argv = malloc(sizeof(char *) * c->multi_bulk_len);
+        c->argv = malloc(sizeof(sds) * c->multi_bulk_len);
     }
 
     while (c->multi_bulk_len) {
@@ -189,7 +192,8 @@ static int process_multibulk_buffer(sub_client *c)
             /* Not enough data (+2 == trailing \r\n) */
             break;
         } else {
-            c->argv[c->argc++] = create_string_obj(c->read_buf+pos, c->bulk_len);
+            /*c->argv[c->argc++] = create_string_obj(c->read_buf+pos, c->bulk_len);*/
+            c->argv[c->argc++] = sdsnewlen(c->read_buf+pos, c->bulk_len);
             pos += c->bulk_len + 2;
         }
         c->bulk_len = -1;
@@ -238,10 +242,12 @@ static int process_inline_buffer(sub_client *c)
 
     sdsrange(c->read_buf, querylen+2, -1);
 
-    c->argv = (char **) malloc(sizeof(char *) * argc);
+    /*c->argv = (char **) malloc(sizeof(char *) * argc);*/
+    c->argv = (char **) malloc(sizeof(sds) * argc);
     for (c->argc = 0, i = 0; i < argc; i++) {
         if (sdslen(argv[i])) {
-            c->argv[c->argc] = strdup(argv[i]);
+            /*c->argv[c->argc] = strdup(argv[i]);*/
+            c->argv[c->argc] = sdsnewlen(argv[i], strlen(argv[i]));
             c->argc++;
         } else {
             sdsfree(argv[i]);
@@ -307,8 +313,43 @@ static void ping_command(sub_client *c)
     add_reply(c, shared.pong);
 }
 
+static int subscribe_channel(sub_client *c, sds channel)
+{
+    TrieData data;
+    size_t len;
+    AlphaChar *chan_alpha;
+
+    len = sdslen(channel);
+    chan_alpha  = (AlphaChar *) malloc(sizeof(AlphaChar) * len + 1);
+
+    conv_to_alpha(server.dflt_to_alpha_conv, channel, chan_alpha, len+1);
+    /* channel not exists in trie, create */
+    if (!trie_retrieve(server.sub_trie, chan_alpha, &data)) {
+        if (!trie_store(server.sub_trie, chan_alpha, TRIE_DATA_DFLT)) {
+            srv_log(LOG_ERROR, "Failed to insert key %s into sub trie", channel);
+            return SUBCLI_ERR;
+        }
+        /* create hashtable mapping from subscribe-channel to client id set */
+        hset *hs = hset_create(SUB_SET_LEN);
+        hset_insert(hs, CLIENT_ID_LEN, c->id, c);
+        if (ght_insert(server.subscibe_table, hs, len, channel) == -1) {
+            hset_release(hs);
+            srv_log(LOG_ERROR,
+                    "Failed to insert key[%s]->set into subscribe hashtable",
+                    channel);
+            return SUBCLI_ERR;
+        }
+    }
+
+    return SUBCLI_OK;
+}
+
 static void subscribe_command(sub_client *c)
 {
+    int i;
+    for (i = 1; i < c->argc; i++) {
+        subscribe_channel(c, c->argv[i]);
+    }
     add_reply_string(c, "+subscribe", 10);
     add_reply_string(c, "\r\n", 2);
 }
@@ -375,7 +416,7 @@ static int prepare_to_write(sub_client *c)
     return SUBCLI_OK;
 }
 
-static void add_reply_bulk(sub_client *c, sds cnt)
+void add_reply_bulk(sub_client *c, sds cnt)
 {
     add_reply_bulklen(c, cnt);
     add_reply(c, cnt);

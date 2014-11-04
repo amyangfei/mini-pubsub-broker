@@ -10,11 +10,12 @@
 
 #include "config.h"
 #include "constant.h"
-#include "broker.h"
 #include "net.h"
 #include "util.h"
 #include "event.h"
+#include "broker.h"
 #include "subcli.h"
+#include "trie_util.h"
 
 sharedStruct shared;
 
@@ -66,7 +67,10 @@ void server_init()
 
     create_shared_struct();
     server.subcli_table = ght_create(SIZE512);
+    server.subscibe_table = ght_create(SIZE512);
     server.sub_commands = sub_commands_init();
+    server.sub_trie = trie_create();
+    init_conv(&server.dflt_to_alpha_conv);
 
     server.evloop = event_base_new();
     if (!server.evloop) {
@@ -184,4 +188,3 @@ int main(int argc, char *argv[])
 
     return 0;
 }
-

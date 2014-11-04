@@ -13,15 +13,8 @@
 #include "subcli.h"
 #include "constant.h"
 
-static void msg_redirect(char *buf, int len);
 static int accept_tcp_handler(evutil_socket_t fd, short event, void *args);
 static void pub_ev_handler(evutil_socket_t fd, short event, void *args);
-
-static void msg_redirect(char *buf, int len)
-{
-    write(STDIN_FILENO, buf, len);
-    write(STDERR_FILENO, buf, len);
-}
 
 static int accept_tcp_handler(evutil_socket_t fd, short event, void *args)
 {
@@ -48,9 +41,10 @@ static void pub_ev_handler(evutil_socket_t fd, short event, void *args)
 
     pub_client *c = (pub_client *) args;
 
-    char chunk[PUB_READ_BUF_LEN+1];
-    int n = read(fd, chunk, PUB_READ_BUF_LEN);
-    if (n == -1) {
+    c->read_buf = sdsMakeRoomFor(c->read_buf, PUB_READ_BUF_LEN);
+    size_t cur_len = sdslen(c->read_buf);
+    int nread = read(fd, c->read_buf + cur_len, PUB_READ_BUF_LEN);
+    if (nread == -1) {
         if (errno == EAGAIN || errno == EINTR) {
             /* temporary unavailable */
         } else {
@@ -58,17 +52,22 @@ static void pub_ev_handler(evutil_socket_t fd, short event, void *args)
                     fd, strerror(errno));
             pub_cli_release(c);
         }
-    } else if (n == 0) {
+    } else if (nread == 0) {
         srv_log(LOG_INFO, "[fd %d] publisher detached", fd);
         pub_cli_release(c);
     } else {
+        /*
         chunk[n] = '\0';
         srv_log(LOG_INFO, "[fd %d] publisher send: %s", fd, chunk);
         write(fd, "hello", 5);
-        msg_redirect(chunk, n);
+        */
         /* data process */
+        sdsIncrLen(c->read_buf, nread);
+        process_pub_read_buf(c);
+        /*process_publish(c, chunk, nread);*/
     }
 }
+
 void sub_ev_handler(evutil_socket_t fd, short event, void *args)
 {
     sub_client *c = (sub_client *) args;

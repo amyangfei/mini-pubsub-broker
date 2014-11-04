@@ -11,6 +11,7 @@
 #include <stdarg.h>
 
 #include "net.h"
+#include "constant.h"
 
 static void net_set_error(char *err, const char *fmt, ...)
 {

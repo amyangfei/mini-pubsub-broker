@@ -32,7 +32,7 @@ typedef struct sub_client {
 
     /* client command argc and argv */
     int argc;
-    char **argv;
+    sds *argv;
 } sub_client;
 
 typedef void sub_command_proc(sub_client *c);
@@ -50,5 +50,6 @@ void sub_cli_release(sub_client *c);
 void process_sub_read_buf(sub_client *c);
 int subcli_event_update(sub_client *c, short event);
 void send_reply_to_subcli(sub_client *c);
+void add_reply_bulk(sub_client *c, sds cnt);
 
 #endif

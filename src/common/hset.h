@@ -14,8 +14,10 @@ typedef struct hset {
 typedef ght_iterator_t hset_iterator;
 
 hset *hset_create(unsigned int size);
+void hset_release(hset *p_hset);
 int hset_size(hset *p_hset);
-int hset_insert(hset *p_hset, unsigned int key_size, const void *key_data);
+int hset_insert(hset *p_hset, unsigned int key_size, const void *key_data,
+        void *val_data);
 void *hset_remove(hset *p_hset, unsigned int key_size, const void *key_data);
 int hset_has(hset *p_hset, unsigned int key_size, const void *key_data);
 void *hset_first(hset *p_hset, hset_iterator *iter, const void **pp_key);

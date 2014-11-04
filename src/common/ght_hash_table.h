@@ -70,14 +70,6 @@ extern "C" {
 #define GHT_HEURISTICS_MOVE_TO_FRONT 2
 #define GHT_AUTOMATIC_REHASH         4
 
-#ifndef TRUE
-#define TRUE 1
-#endif
-
-#ifndef FALSE
-#define FALSE 0
-#endif
-
 /** unsigned 32 bit integer. */
 typedef unsigned int ght_uint32_t;
 

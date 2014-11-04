@@ -326,7 +326,7 @@ ght_hash_table_t *ght_create(unsigned int i_size)
 
   /* Set flags */
   p_ht->i_heuristics = GHT_HEURISTICS_NONE;
-  p_ht->i_automatic_rehash = FALSE;
+  p_ht->i_automatic_rehash = 0;
 
   p_ht->bucket_limit = 0;
   p_ht->fn_bucket_free = NULL;
@@ -722,7 +722,7 @@ void ght_rehash(ght_hash_table_t *p_ht, unsigned int i_size)
   ght_set_hash(p_tmp, p_ht->fn_hash);
   ght_set_alloc(p_tmp, p_ht->fn_alloc, p_ht->fn_free);
   ght_set_heuristics(p_tmp, GHT_HEURISTICS_NONE);
-  ght_set_rehash(p_tmp, FALSE);
+  ght_set_rehash(p_tmp, 0);
 
   /* Walk through all elements in the table and insert them into the temporary one. */
   for (p = ght_first(p_ht, &iterator, &p_key); p; p = ght_next(p_ht, &iterator, &p_key))
