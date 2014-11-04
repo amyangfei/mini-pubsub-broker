@@ -2,8 +2,13 @@
 #define __BROKER_H
 
 #include <event2/event.h>
+#include <datrie/trie.h>
+#include <iconv.h>
 
-#include "net.h"
+#include "sds.h"
+#include "list.h"
+#include "ght_hash_table.h"
+#include "constant.h"
 
 typedef struct broker {
     char *cfg_path;
@@ -21,11 +26,36 @@ typedef struct broker {
     struct event *pub_ev;
     struct event *sub_ev;
 
+    /* mapping from subscibe-client id to the subscribe-client */
+    hashtable *subcli_table;
+    /* mapping from subscibe key to a list of clients who subscribed this key */
+    hashtable *subscibe_table;
+    /* mapping from command name key to sub_command struct */
+    hashtable *sub_commands;
+    /* a Trie structure recording the subscrib keys */
+    Trie *sub_trie;
+    /* used as default iconv to_code in trie structure */
+    iconv_t dflt_to_alpha_conv;
+
     int pub_backlog;
     int sub_backlog;
-    char neterr[NET_ERR_LEN];  /* Error buffer for net.c */
+
+    /* Error buffer for net.c */
+    char neterr[NET_ERR_LEN];
+
+    /* auto increasing counter for sub clients */
+    int sub_inc_counter;
+
 } broker;
 
+typedef struct sharedStruct {
+    sds crlf;
+    sds ok;
+    sds err;
+    sds pong;
+} sharedStruct;
+
+extern sharedStruct shared;
 extern broker server;
 
 #endif

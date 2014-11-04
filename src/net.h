@@ -5,7 +5,6 @@
 
 #define NET_OK 0
 #define NET_ERR -1
-#define NET_ERR_LEN 256
 
 int net_tcp_server(char *err, int port, char *bindaddr, int backlog);
 int net_tcp_set_nonblock(char *err, int fd);

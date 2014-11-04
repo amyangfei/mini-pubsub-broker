@@ -18,10 +18,12 @@ all: dirs $(BUILD_PATH)/broker
 
 $(BUILD_PATH)/broker: $(BUILD_PATH)/broker.o $(BUILD_PATH)/util.o \
 	$(BUILD_PATH)/common/cJSON.o $(BUILD_PATH)/common/zmalloc.o \
-	$(BUILD_PATH)/common/sds.o \
+	$(BUILD_PATH)/common/sds.o $(BUILD_PATH)/common/ght_hash_table.o \
+	$(BUILD_PATH)/common/ght_hash_function.o $(BUILD_PATH)/common/hset.o \
+	$(BUILD_PATH)/common/trie_util.o \
 	$(BUILD_PATH)/config.o $(BUILD_PATH)/net.o $(BUILD_PATH)/event.o \
 	$(BUILD_PATH)/protocol/pubcli.o $(BUILD_PATH)/protocol/subcli.o
-	$(CC) $(CFLAGS) -o $@ $^ -levent -lm
+	$(CC) $(CFLAGS) -o $@ $^ -levent -lm -ldatrie
 
 $(BUILD_PATH)/%.o: $(SRC_PATH)/%.$(SRC_EXT)
 	@echo "Compiling: $< -> $@"

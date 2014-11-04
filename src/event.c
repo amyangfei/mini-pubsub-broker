@@ -13,16 +13,8 @@
 #include "subcli.h"
 #include "constant.h"
 
-static void msg_redirect(char *buf, int len);
 static int accept_tcp_handler(evutil_socket_t fd, short event, void *args);
 static void pub_ev_handler(evutil_socket_t fd, short event, void *args);
-static void sub_ev_handler(evutil_socket_t fd, short event, void *args);
-
-static void msg_redirect(char *buf, int len)
-{
-    write(STDIN_FILENO, buf, len);
-    write(STDERR_FILENO, buf, len);
-}
 
 static int accept_tcp_handler(evutil_socket_t fd, short event, void *args)
 {
@@ -49,9 +41,10 @@ static void pub_ev_handler(evutil_socket_t fd, short event, void *args)
 
     pub_client *c = (pub_client *) args;
 
-    char chunk[PUB_READ_BUF_LEN+1];
-    int n = read(fd, chunk, PUB_READ_BUF_LEN);
-    if (n == -1) {
+    c->read_buf = sdsMakeRoomFor(c->read_buf, PUB_READ_BUF_LEN);
+    size_t cur_len = sdslen(c->read_buf);
+    int nread = read(fd, c->read_buf + cur_len, PUB_READ_BUF_LEN);
+    if (nread == -1) {
         if (errno == EAGAIN || errno == EINTR) {
             /* temporary unavailable */
         } else {
@@ -59,39 +52,50 @@ static void pub_ev_handler(evutil_socket_t fd, short event, void *args)
                     fd, strerror(errno));
             pub_cli_release(c);
         }
-    } else if (n == 0) {
+    } else if (nread == 0) {
         srv_log(LOG_INFO, "[fd %d] publisher detached", fd);
         pub_cli_release(c);
     } else {
+        /*
         chunk[n] = '\0';
         srv_log(LOG_INFO, "[fd %d] publisher send: %s", fd, chunk);
         write(fd, "hello", 5);
-        msg_redirect(chunk, n);
+        */
         /* data process */
+        sdsIncrLen(c->read_buf, nread);
+        process_pub_read_buf(c);
+        /*process_publish(c, chunk, nread);*/
     }
 }
 
-static void sub_ev_handler(evutil_socket_t fd, short event, void *args)
+void sub_ev_handler(evutil_socket_t fd, short event, void *args)
 {
     sub_client *c = (sub_client *) args;
 
     if (event & EV_READ) {
-        char chunk[SUB_READ_BUF_LEN];
-        int n = read(fd, chunk, sizeof(chunk));
+        c->read_buf = sdsMakeRoomFor(c->read_buf, SUB_READ_BUF_LEN);
+        size_t cur_len = sdslen(c->read_buf);
+        int n = read(fd, c->read_buf + cur_len, SUB_READ_BUF_LEN);
         if (n == -1) {
             if (errno == EAGAIN || errno == EINTR) {
                 /* temporary unavailable */
+                return;
             } else {
                 srv_log(LOG_ERROR, "[fd %d] failed to read from sublisher: %s",
                         fd, strerror(errno));
                 sub_cli_release(c);
+                return;
             }
         } else if (n == 0) {
             srv_log(LOG_INFO, "[fd %d] sublisher detached", fd);
             sub_cli_release(c);
+            return;
         } else {
-            /* ignore */
+            sdsIncrLen(c->read_buf, n);
         }
+        process_sub_read_buf(c);
+    } else if (event & EV_WRITE) {
+        send_reply_to_subcli(c);
     }
 }
 
@@ -121,11 +125,11 @@ void accept_sub_handler(evutil_socket_t fd, short event, void *args)
     if (cfd == -1) {
         return;
     }
-    sub_client *c = sub_cli_create(cfd);
+    sub_client *c = sub_cli_create(cfd, ++server.sub_inc_counter);
     net_tcp_set_nonblock(NULL, cfd);
     net_enable_tcp_no_delay(NULL, cfd);
     struct event *sub_ev = event_new(server.evloop, cfd,
-            EV_READ|EV_WRITE|EV_PERSIST, sub_ev_handler, c);
+            EV_READ|EV_PERSIST, sub_ev_handler, c);
     if (sub_ev == NULL) {
         free(c);
         close(cfd);
@@ -133,5 +137,6 @@ void accept_sub_handler(evutil_socket_t fd, short event, void *args)
     }
     event_add(sub_ev, NULL);
     c->ev = sub_ev;
+    ght_insert(server.subcli_table, c, CLIENT_ID_LEN, c->id);
 }
 
